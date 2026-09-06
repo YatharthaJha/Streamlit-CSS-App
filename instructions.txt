@@ -1,0 +1,10 @@
+-> To install the libraries, open terminal or command prompt, navigate to your project folder and run the following command:
+
+	pip install -r requirements.txt
+
+-> Once finished, you can open the file in Visual Studio Code editor and open a fresh terminal using CTRL + ` (that is under esc).
+
+-> There, refresh if needed and run the following:
+
+	py -m streamlit run app.py          [WIDNOWS]
+	streamlit run app.py                [MAC/LINUX]
