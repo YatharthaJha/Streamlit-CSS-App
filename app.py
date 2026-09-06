@@ -29,6 +29,14 @@ lambd = 0.15 # Soak heat transfer efficiency factor ($\lambda$)
 k_cooling = 0.04 # Reservoir cooling/dissipation constant ($k$)
 ea_over_r = 4500.0 # Activation energy over gas constant ($E_a / R$) for Arrhenius equation
 q_base = 15.0 # Baseline production rate (bbl/day)
+max_upstroke = 80
+min_downstroke = 25
+distortion_scaling_factor = 45 #for fluid pound
+theoretical_displacement = 0.01 #max fillage
+n = 200 #number of pts used to generate pump stroke
+pi = m.pi
+oil_price_per_bbl = 7500.0 # Assumed market price
+daily_opex = 300000.0 # Daily cost to run the pump, pay crew, maintain site
 #endregion
 
 #region INITIALIZATION
@@ -53,6 +61,16 @@ if 'radial_penetration' not in st.session_state:
     st.session_state.radial_penetration = 0.0
 if 'peak_reservoir_temp' not in st.session_state:
     st.session_state.peak_reservoir_temp = surface_earth_temp
+if 'daily_oil_rate' not in st.session_state:
+    st.session_state.daily_oil_rate = 0.0
+if 'daily_revenue' not in st.session_state:
+    st.session_state.daily_revenue = 0.0
+if 'net_profit' not in st.session_state:
+    st.session_state.net_profit = 0.0
+if 'total_profit' not in st.session_state:
+    st.session_state.total_profit = 0.0
+if 'pump_fillage' not in st.session_state:
+    st.session_state.pump_fillage = 0.0
 #endregion
 
 #region SIDEBAR
@@ -79,7 +97,7 @@ with st.sidebar:
 
     #PRODUCTION CONTROLS
     with st.expander("3. Production (SRP) Controls", expanded=False):
-        pump_toggle = st.radio("Pump Switch:", ["ON", "OFF"], index =1, horizontal= True)
+        pump_toggle = st.radio("Pump Control Switch:", ["ON", "OFF"], index =1, horizontal= True)
         pump_is_off = (pump_toggle == "OFF")
 
         pump_spd = st.slider("Pump speed (SPM)", 2, 25, 8, 1, disabled = pump_is_off)
@@ -107,9 +125,7 @@ with st.sidebar:
             st.caption("*Configuration locked. Uncheck above to modify.*")
 
     #STEP CONTROLS 
-    with st.expander("Step controls", expanded = True):
-        days_to_step = st.number_input("Days to step forward", min_value=1, max_value=30, value=1, step=1)
-        step_button = st.button("Run Simulation Step", type="primary")
+    step_button = st.button("Advance a day", type="primary")
 #endregion
 
 #region MASTER CLOCK AND FUNCTIONS
@@ -117,7 +133,7 @@ with st.sidebar:
 #                           MASTER CLOCK AND FUNCTIONS
 #================================================================================
 if step_button:
-    st.session_state.simulation_day += days_to_step
+    st.session_state.simulation_day += 1
 
 current_day = st.session_state.simulation_day
 
@@ -150,9 +166,7 @@ elif current_day <= injection_duration:
     baseline_temp = surface_earth_temp + (depth * geothermal_gradient)
     t_kelvin = st.session_state.current_reservoir_temp + 273.15
     t_ref_kelvin = baseline_temp + 273.15
-        
     current_viscosity = base_oil_viscosity * m.exp(ea_over_r * ((1.0 / t_kelvin) - (1.0 / t_ref_kelvin)))
-        
     if current_viscosity < 10.0:
         current_viscosity = 10.0
             
@@ -179,7 +193,6 @@ elif current_day <= (injection_duration + soak_duration):
         
     t_kelvin = st.session_state.current_reservoir_temp + 273.15
     t_ref_kelvin = baseline_temp + 273.15
-        
     current_viscosity = base_oil_viscosity * m.exp(ea_over_r * ((1.0 / t_kelvin) - (1.0 / t_ref_kelvin)))
         
     # oil cant drop too low
@@ -195,7 +208,54 @@ elif current_day <= (injection_duration + soak_duration):
 #============================STAGE 3: SRP Production=============================
 else:
     st.session_state.current_stage = "Stage 3: SRP Production"
-    ### WAITING FOR ROLE 2 FUNCTIONS
+
+    #Basic
+    prod_day = current_day - (injection_duration + soak_duration)
+    baseline_temp = surface_earth_temp + (depth * geothermal_gradient)
+    delta_t_0 = st.session_state.get('final_delta_t_0', 50.0)
+
+    #Cooling
+    current_temp = baseline_temp + (delta_t_0 * m.exp(-k_cooling * prod_day))
+    if current_temp < baseline_temp:
+        current_temp = baseline_temp
+    st.session_state.current_reservoir_temp = current_temp
+
+    #Visocity
+    t_kelvin = current_temp + 273.15
+    t_ref_kelvin = baseline_temp + 273.15
+    current_viscosity = base_oil_viscosity * m.exp(ea_over_r * ((1.0 / t_kelvin) - (1.0 / t_ref_kelvin)))
+    if current_viscosity > base_oil_viscosity:
+        current_viscosity = base_oil_viscosity
+    st.session_state.current_viscosity = current_viscosity
+
+    #daily oil rate
+    daily_oil_rate = q_base * (base_oil_viscosity / current_viscosity)
+
+    #DYNO CARD
+    max_pump_capacity_per_day = pump_spd * 1440 * theoretical_displacement
+    fillage_fraction = min(1.0, daily_oil_rate / max_pump_capacity_per_day)
+    up_pos = np.linspace(0, 1, n)
+    up_load =max_upstroke - 15*up_pos
+    down_pos = np.linspace(0, 1, n)
+    down_load = max_upstroke + 15*(1-down_pos)
+    if fillage_fraction < 1.0:
+            severity = 1.0 - fillage_fraction
+            distortion = (severity * distortion_scaling_factor * np.sin(pi * (1 - down_pos)))
+            down_load -= distortion
+    st.session_state.daily_oil_rate = daily_oil_rate
+    st.session_state.pump_fillage = fillage_fraction
+    st.session_state.dyno_position = np.concatenate([up_pos, down_pos])
+    st.session_state.dyno_load = np.concatenate([up_load, down_load])
+
+    if st.session_state.pump_fillage < 0.75:
+        st.warning(f"⚠️ **MECHANICAL WARNING:** Pump fillage has dropped to {st.session_state.pump_fillage * 100:.0f}%. Severe fluid pound detected. Risk of rod string failure.")
+    
+    st.session_state.daily_revenue = st.session_state.daily_oil_rate * oil_price_per_bbl
+    st.session_state.net_profit = st.session_state.daily_revenue - daily_opex
+    st.session_state.total_profit += st.session_state.net_profit
+    # If the pump costs more to run than the oil it lifts is worth
+    if st.session_state.net_profit <= 0:
+        st.error(f"🛑 Daily revenue (₹{st.session_state.daily_revenue:.0f}) has fallen below daily operating cost (₹{daily_opex:.0f}). Halt production and initiate next steam cycle.")
 #endregion
 
 #region DISPLAY
@@ -206,20 +266,31 @@ st.header(f"Current Stage: {st.session_state.current_stage}")
 #Row1: days and stage
 col1, col2 = st.columns(2)
 col1.metric("Simulation Day", st.session_state.simulation_day)
-col2.metric("Total Steam Injected (bbls)", f"{st.session_state.total_steam_injected:,.0f}")
 
-st.write("")
+st.write("---")
 
-#row2: dynamically changing temp and visocity
-col3, col4 = st.columns(2)
+# THERMODYNAMICS & RESERVOIR
+st.markdown("#### Reservoir Physics")
+col3, col4, col5 = st.columns(3)
 col3.metric("Reservoir Temp (°C)", f"{st.session_state.current_reservoir_temp:.2f}")
 col4.metric("Oil Viscosity (cP)", f"{st.session_state.current_viscosity:,.0f}")
+col5.metric("Radial Heat Penetration (m)", f"{st.session_state.radial_penetration:.2f}")
 
 st.write("")
 
-#row2: total metrics
-col5, col6 = st.columns(2)
-col5.metric("Radial Heat Penetration (m)", f"{st.session_state.radial_penetration:.2f}")
-col6.metric("Peak Reservoir Temperature (°C)", F"{st.session_state.peak_reservoir_temp:.2f}")
+# OPERATIONS & PRODUCTION
+st.markdown("#### Surface Operations")
+col6, col7, col8 = st.columns(3)
+col6.metric("Total Steam Injected (bbls)", f"{st.session_state.total_steam_injected:,.0f}")
+col7.metric("Daily Oil Rate (bbl/d)", f"{st.session_state.daily_oil_rate:.1f}")
+col8.metric("Pump Fillage (%)", f"{st.session_state.pump_fillage * 100:.0f}%")
+
+st.write("")
+
+# MARKET ECONOMICS
+st.markdown("#### Financials")
+col9, col10, col11 = st.columns(3)
+col9.metric("Daily Profit", f"₹{st.session_state.net_profit:,.2f}")
+col10.metric("Total Profit", f"₹{st.session_state.total_profit:,.2f}")
 
 #endregion
