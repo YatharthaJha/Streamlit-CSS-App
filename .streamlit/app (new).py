@@ -256,18 +256,8 @@ else:
     # If the pump costs more to run than the oil it lifts is worth
     if st.session_state.net_profit <= 0:
         st.error(f"🛑 Daily revenue (₹{st.session_state.daily_revenue:.0f}) has fallen below daily operating cost (₹{daily_opex:.0f}). Halt production and initiate next steam cycle.")
-    #region GRAPHS
-#================================================================================
-#                                   SIMULATION GRAPHS
-#================================================================================
-st.write("---")
-st.markdown("## 📊 Simulation Graphs")
-
-
-
 
 #endregion
-
 
 #region DISPLAY
 #================================================================================
@@ -304,7 +294,10 @@ col9, col10, col11 = st.columns(3)
 col9.metric("Daily Profit", f"₹{st.session_state.net_profit:,.2f}")
 col10.metric("Total Profit", f"₹{st.session_state.total_profit:,.2f}")
  
+#endregion
+
 #region GRAPHS
+
 #================================================================================
 #                                   SIMULATION GRAPHS
 #================================================================================
@@ -372,62 +365,68 @@ days_arr, temp_arr, visc_arr, rate_arr = simulate_cycle(
     steam_rate, steam_temp, steam_q, injection_duration, soak_duration, depth, prod_days_to_show
 )
 
+col1, col2 = st.columns(2)
 
-# 1.# Combined: Viscosity & Oil Production Rate vs Time
-fig23, ax_visc = plt.subplots(figsize=(7, 4.5))
+with col1:
+    # 1.# Combined: Viscosity & Oil Production Rate vs Time
+    fig23, ax_visc = plt.subplots(figsize=(7, 4.5))
 
-# Left axis: viscosity
-color_visc = "#1565C0"
-ax_visc.plot(days_arr, visc_arr, color=color_visc, label="Viscosity")
-ax_visc.set_xlabel("Day")
-ax_visc.set_ylabel("Viscosity (cP)", color=color_visc)
-ax_visc.tick_params(axis='y', labelcolor=color_visc)
+    # Left axis: viscosity
+    color_visc = "#1565C0"
+    ax_visc.plot(days_arr, visc_arr, color=color_visc, label="Viscosity")
+    ax_visc.set_xlabel("Day")
+    ax_visc.set_ylabel("Viscosity (cP)", color=color_visc)
+    ax_visc.tick_params(axis='y', labelcolor=color_visc)
 
-# Right axis: oil production rate, sharing the same x-axis
-ax_rate = ax_visc.twinx()
-color_rate = "#2E7D32"
-ax_rate.plot(days_arr, rate_arr, color=color_rate, label="Oil Production Rate")
-ax_rate.set_ylabel("Oil Rate (bbl/day)", color=color_rate)
-ax_rate.tick_params(axis='y', labelcolor=color_rate)
+    # Right axis: oil production rate, sharing the same x-axis
+    ax_rate = ax_visc.twinx()
+    color_rate = "#2E7D32"
+    ax_rate.plot(days_arr, rate_arr, color=color_rate, label="Oil Production Rate")
+    ax_rate.set_ylabel("Oil Rate (bbl/day)", color=color_rate)
+    ax_rate.tick_params(axis='y', labelcolor=color_rate)
 
-# Combined legend (since each axis only knows its own line by default)
-lines_1, labels_1 = ax_visc.get_legend_handles_labels()
-lines_2, labels_2 = ax_rate.get_legend_handles_labels()
-ax_visc.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
+    # Combined legend (since each axis only knows its own line by default)
+    lines_1, labels_1 = ax_visc.get_legend_handles_labels()
+    lines_2, labels_2 = ax_rate.get_legend_handles_labels()
+    ax_visc.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
 
-ax_visc.set_title("Viscosity & Oil Production Rate vs Time")
-ax_visc.grid(alpha=0.3)
-fig23.tight_layout()
-st.pyplot(fig23)
+    ax_visc.set_title("Viscosity & Oil Production Rate vs Time")
+    ax_visc.grid(alpha=0.3)
+    fig23.tight_layout()
+    st.pyplot(fig23)
 
-# 2. Production Rate for Different Steam Volumes
-fig4, ax4 = plt.subplots(figsize=(7, 4))
-for sr, color in zip([200, 450, 700, 1000], ["#90CAF9", "#42A5F5", "#1E88E5", "#0D47A1"]):
-    d, t, v, r = simulate_cycle(sr, steam_temp, steam_q, injection_duration, soak_duration, depth, prod_days_to_show)
-    ax4.plot(d, r, label=f"{sr} bbl/day steam", color=color)
-ax4.set_xlabel("Day"); ax4.set_ylabel("Oil Rate (bbl/day)")
-ax4.set_title("4. Production Rate for Different Steam Volumes")
-ax4.legend(); ax4.grid(alpha=0.3)
-st.pyplot(fig4)
+with col2:
+    # 2. Production Rate for Different Steam Volumes
+    fig4, ax4 = plt.subplots(figsize=(7, 4))
+    for sr, color in zip([200, 450, 700, 1000], ["#90CAF9", "#42A5F5", "#1E88E5", "#0D47A1"]):
+        d, t, v, r = simulate_cycle(sr, steam_temp, steam_q, injection_duration, soak_duration, depth, prod_days_to_show)
+        ax4.plot(d, r, label=f"{sr} bbl/day steam", color=color)
+    ax4.set_xlabel("Day"); ax4.set_ylabel("Oil Rate (bbl/day)")
+    ax4.set_title("4. Production Rate for Different Steam Volumes")
+    ax4.legend(); ax4.grid(alpha=0.3)
+    st.pyplot(fig4)
 
-# 3. Production Rate for Different Soak Times
-fig5, ax5 = plt.subplots(figsize=(7, 4))
-for sd, color in zip([2, 5, 8, 12], ["#FFCC80", "#FFA726", "#FB8C00", "#E65100"]):
-    d, t, v, r = simulate_cycle(steam_rate, steam_temp, steam_q, injection_duration, sd, depth, prod_days_to_show)
-    ax5.plot(d, r, label=f"{sd} days soak", color=color)
-ax5.set_xlabel("Day"); ax5.set_ylabel("Oil Rate (bbl/day)")
-ax5.set_title("5. Production Rate for Different Soak Times")
-ax5.legend(); ax5.grid(alpha=0.3)
-st.pyplot(fig5)
+col1, col2 = st.columns(2)
+with col1:
+    # 3. Production Rate for Different Soak Times
+    fig5, ax5 = plt.subplots(figsize=(7, 4))
+    for sd, color in zip([2, 5, 8, 12], ["#FFCC80", "#FFA726", "#FB8C00", "#E65100"]):
+        d, t, v, r = simulate_cycle(steam_rate, steam_temp, steam_q, injection_duration, sd, depth, prod_days_to_show)
+        ax5.plot(d, r, label=f"{sd} days soak", color=color)
+    ax5.set_xlabel("Day"); ax5.set_ylabel("Oil Rate (bbl/day)")
+    ax5.set_title("5. Production Rate for Different Soak Times")
+    ax5.legend(); ax5.grid(alpha=0.3)
+    st.pyplot(fig5)
 
-# 4. Dynamometer Card (live, from the actual simulation clock)
-if st.session_state.current_stage == "Stage 3: SRP Production":
-    fig6, ax6 = plt.subplots(figsize=(7, 5))
-    ax6.plot(st.session_state.dyno_position, st.session_state.dyno_load, color="#6A1B9A")
-    ax6.set_xlabel("Rod Position"); ax6.set_ylabel("Polished-Rod Load")
-    ax6.set_title(f"6. Dynamometer Card (Fillage = {st.session_state.pump_fillage*100:.0f}%)")
-    ax6.grid(alpha=0.3)
-    st.pyplot(fig6)
-else:
-    st.info("Dynamometer card will appear once the well reaches Stage 3: SRP Production — click 'Advance a day' until then.") 
+with col2:
+    # 4. Dynamometer Card (live, from the actual simulation clock)
+    if st.session_state.current_stage == "Stage 3: SRP Production":
+        fig6, ax6 = plt.subplots(figsize=(7, 5))
+        ax6.plot(st.session_state.dyno_position, st.session_state.dyno_load, color="#6A1B9A")
+        ax6.set_xlabel("Rod Position"); ax6.set_ylabel("Polished-Rod Load")
+        ax6.set_title(f"6. Dynamometer Card (Fillage = {st.session_state.pump_fillage*100:.0f}%)")
+        ax6.grid(alpha=0.3)
+        st.pyplot(fig6)
+    else:
+        st.info("Dynamometer card will appear once the well reaches Stage 3: SRP Production — click 'Advance a day' until then.") 
 #endregion
