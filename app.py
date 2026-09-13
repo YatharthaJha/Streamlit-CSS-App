@@ -237,7 +237,7 @@ else:
     up_pos = np.linspace(0, 1, n)
     up_load =max_upstroke - 15*up_pos
     down_pos = np.linspace(0, 1, n)
-    down_load = max_upstroke + 15*(1-down_pos)
+    down_load = min_downstroke + 15*(1-down_pos)
     if fillage_fraction < 1.0:
             severity = 1.0 - fillage_fraction
             distortion = (severity * distortion_scaling_factor * np.sin(pi * (1 - down_pos)))
@@ -256,6 +256,7 @@ else:
     # If the pump costs more to run than the oil it lifts is worth
     if st.session_state.net_profit <= 0:
         st.error(f"🛑 Daily revenue (₹{st.session_state.daily_revenue:.0f}) has fallen below daily operating cost (₹{daily_opex:.0f}). Halt production and initiate next steam cycle.")
+
 #endregion
 
 #region DISPLAY
@@ -292,5 +293,140 @@ st.markdown("#### Financials")
 col9, col10, col11 = st.columns(3)
 col9.metric("Daily Profit", f"₹{st.session_state.net_profit:,.2f}")
 col10.metric("Total Profit", f"₹{st.session_state.total_profit:,.2f}")
+ 
+#endregion
 
+#region GRAPHS
+
+#================================================================================
+#                                   SIMULATION GRAPHS
+#================================================================================
+st.write("---")
+st.markdown("## 📊 Simulation Graphs")
+
+def simulate_cycle(steam_rate, steam_temp, steam_q, injection_duration, soak_duration,
+                    depth, prod_days):
+    """
+    Re-runs the full Injection -> Soak -> Production cycle as a standalone function,
+    independent of session_state, so it can be called repeatedly for comparison plots
+    without needing to click 'Advance a day'. Mirrors the physics in the Master Clock
+    section above.
+    """
+    baseline_temp = surface_earth_temp + (depth * geothermal_gradient)
+    reservoir_temp = baseline_temp
+    total_days = injection_duration + soak_duration + prod_days
+
+    days_arr = np.arange(0, total_days + 1)
+    temp_arr = np.zeros_like(days_arr, dtype=float)
+    visc_arr = np.zeros_like(days_arr, dtype=float)
+    rate_arr = np.zeros_like(days_arr, dtype=float)
+
+    t_bottomhole = steam_temp * (1 - wellbore_loss_factor * depth)
+    enthalpy = (water_specific_heat * t_bottomhole) + (steam_q * latent_heat_vap)
+    initial_radius = (well_casing_diameter * 0.0254) / 2.0
+    final_delta_t0 = 0.0
+
+    for i, day in enumerate(days_arr):
+        if day == 0:
+            reservoir_temp = baseline_temp
+        elif day <= injection_duration:
+            steam_chamber_radius = initial_radius + (day * radial_expansion_rate)
+            dynamic_volume = 3.14159 * (steam_chamber_radius ** 2) * res_thickness
+            dynamic_rock_mass = dynamic_volume * rock_density
+            daily_heat_injected = (steam_rate * 158.987) * enthalpy
+            temp_increase = daily_heat_injected / (dynamic_rock_mass * res_heat_capacity)
+            reservoir_temp += temp_increase
+            reservoir_temp = min(reservoir_temp, t_bottomhole)
+        elif day <= (injection_duration + soak_duration):
+            current_delta_t = reservoir_temp - baseline_temp
+            temp_loss = current_delta_t * caprock_heat_loss_rate
+            reservoir_temp -= temp_loss
+            if day == (injection_duration + soak_duration):
+                final_delta_t0 = reservoir_temp - baseline_temp
+        else:
+            prod_day = day - (injection_duration + soak_duration)
+            reservoir_temp = baseline_temp + (final_delta_t0 * m.exp(-k_cooling * prod_day))
+            reservoir_temp = max(reservoir_temp, baseline_temp)
+
+        t_kelvin = reservoir_temp + 273.15
+        t_ref_kelvin = baseline_temp + 273.15
+        viscosity = base_oil_viscosity * m.exp(ea_over_r * ((1.0/t_kelvin) - (1.0/t_ref_kelvin)))
+        viscosity = max(min(viscosity, base_oil_viscosity), 10.0)
+
+        is_producing = day > (injection_duration + soak_duration)
+        oil_rate = q_base * (base_oil_viscosity / viscosity) if is_producing else 0.0
+
+        temp_arr[i], visc_arr[i], rate_arr[i] = reservoir_temp, viscosity, oil_rate
+
+    return days_arr, temp_arr, visc_arr, rate_arr
+
+prod_days_to_show = st.slider("Production days to simulate for graphs", 10, 120, 60, 5)
+days_arr, temp_arr, visc_arr, rate_arr = simulate_cycle(
+    steam_rate, steam_temp, steam_q, injection_duration, soak_duration, depth, prod_days_to_show
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # 1.# Combined: Viscosity & Oil Production Rate vs Time
+    fig23, ax_visc = plt.subplots(figsize=(7, 4.5))
+
+    # Left axis: viscosity
+    color_visc = "#1565C0"
+    ax_visc.plot(days_arr, visc_arr, color=color_visc, label="Viscosity")
+    ax_visc.set_xlabel("Day")
+    ax_visc.set_ylabel("Viscosity (cP)", color=color_visc)
+    ax_visc.tick_params(axis='y', labelcolor=color_visc)
+
+    # Right axis: oil production rate, sharing the same x-axis
+    ax_rate = ax_visc.twinx()
+    color_rate = "#2E7D32"
+    ax_rate.plot(days_arr, rate_arr, color=color_rate, label="Oil Production Rate")
+    ax_rate.set_ylabel("Oil Rate (bbl/day)", color=color_rate)
+    ax_rate.tick_params(axis='y', labelcolor=color_rate)
+
+    # Combined legend (since each axis only knows its own line by default)
+    lines_1, labels_1 = ax_visc.get_legend_handles_labels()
+    lines_2, labels_2 = ax_rate.get_legend_handles_labels()
+    ax_visc.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
+
+    ax_visc.set_title("Viscosity & Oil Production Rate vs Time")
+    ax_visc.grid(alpha=0.3)
+    fig23.tight_layout()
+    st.pyplot(fig23)
+
+with col2:
+    # 2. Production Rate for Different Steam Volumes
+    fig4, ax4 = plt.subplots(figsize=(7, 4))
+    for sr, color in zip([200, 450, 700, 1000], ["#90CAF9", "#42A5F5", "#1E88E5", "#0D47A1"]):
+        d, t, v, r = simulate_cycle(sr, steam_temp, steam_q, injection_duration, soak_duration, depth, prod_days_to_show)
+        ax4.plot(d, r, label=f"{sr} bbl/day steam", color=color)
+    ax4.set_xlabel("Day"); ax4.set_ylabel("Oil Rate (bbl/day)")
+    ax4.set_title("4. Production Rate for Different Steam Volumes")
+    ax4.legend(); ax4.grid(alpha=0.3)
+    st.pyplot(fig4)
+
+col1, col2 = st.columns(2)
+with col1:
+    # 3. Production Rate for Different Soak Times
+    fig5, ax5 = plt.subplots(figsize=(7, 4))
+    for sd, color in zip([2, 5, 8, 12], ["#FFCC80", "#FFA726", "#FB8C00", "#E65100"]):
+        d, t, v, r = simulate_cycle(steam_rate, steam_temp, steam_q, injection_duration, sd, depth, prod_days_to_show)
+        ax5.plot(d, r, label=f"{sd} days soak", color=color)
+    ax5.set_xlabel("Day"); ax5.set_ylabel("Oil Rate (bbl/day)")
+    ax5.set_title("5. Production Rate for Different Soak Times")
+    ax5.legend(); ax5.grid(alpha=0.3)
+    st.pyplot(fig5)
+
+with col2:
+    # 4. Dynamometer Card (live, from the actual simulation clock)
+    if st.session_state.current_stage == "Stage 3: SRP Production":
+        fig6, ax6 = plt.subplots(figsize=(7, 5))
+        ax6.plot(st.session_state.dyno_position, st.session_state.dyno_load, color="#6A1B9A")
+        ax6.set_xlabel("Rod Position"); ax6.set_ylabel("Polished-Rod Load")
+        ax6.set_title(f"6. Dynamometer Card (Fillage = {st.session_state.pump_fillage*100:.0f}%)")
+        ax6.grid(alpha=0.3)
+        st.pyplot(fig6)
+    else:
+        st.info("Dynamometer card will appear once the well reaches Stage 3: SRP Production — click 'Advance a day' until then.") 
 #endregion
