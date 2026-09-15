@@ -247,9 +247,11 @@ else:
     st.session_state.dyno_position = np.concatenate([up_pos, down_pos])
     st.session_state.dyno_load = np.concatenate([up_load, down_load])
 
-    if st.session_state.pump_fillage < 0.75:
-        st.warning(f"⚠️ **MECHANICAL WARNING:** Pump fillage has dropped to {st.session_state.pump_fillage * 100:.0f}%. Severe fluid pound detected. Risk of rod string failure.")
-    
+    if st.session_state.pump_fillage < 0.80:
+        st.warning(f"Pump fillage has dropped to {st.session_state.pump_fillage * 100:.0f}%. Recommended to decrese Pump Speed immediately.")
+
+    elif st.session_state.pump_fillage < 0.70:
+        st.warning(f" ⚠️ **MECHANICAL WARNING:** Severe fluid pound detected. Immediately decrease pump speed.")
     st.session_state.daily_revenue = st.session_state.daily_oil_rate * oil_price_per_bbl
     st.session_state.net_profit = st.session_state.daily_revenue - daily_opex
     st.session_state.total_profit += st.session_state.net_profit
