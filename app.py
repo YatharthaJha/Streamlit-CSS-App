@@ -14,7 +14,7 @@ st.divider()
 #                                   CONSTANTS
 #================================================================================
 geothermal_gradient = 0.025 # C/m
-surface_earth_temp = 15 # C
+surface_earth_temp = 50 # C
 wellbore_loss_factor = 0.0002 # per meter
 water_specific_heat = 4.18 # kJ/kg C
 latent_heat_vap = 2257.0 # kJ/kg
@@ -23,7 +23,7 @@ rock_density = 2200.0 # kg/m^3 (average sandstone density)
 radial_expansion_rate = 4
 res_heat_capacity = 1.2 # kJ/kg C
 caprock_heat_loss_rate = 0.02 # 2% heat loss per day during soaking amd production
-base_oil_viscosity = 10000.0 # cP (extremely thick unheated oil)
+base_oil_viscosity = 12000.0 # cP (extremely thick unheated oil)
 alpha = 0.35 # Steam volume to temperature scaling coefficient ($\alpha$)
 lambd = 0.15 # Soak heat transfer efficiency factor ($\lambda$)
 k_cooling = 0.04 # Reservoir cooling/dissipation constant ($k$)
