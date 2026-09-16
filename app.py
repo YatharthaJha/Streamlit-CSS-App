@@ -404,7 +404,7 @@ with col2:
         d, t, v, r = simulate_cycle(sr, steam_temp, steam_q, injection_duration, soak_duration, depth, prod_days_to_show)
         ax4.plot(d, r, label=f"{sr} bbl/day steam", color=color)
     ax4.set_xlabel("Day"); ax4.set_ylabel("Oil Rate (bbl/day)")
-    ax4.set_title("4. Production Rate for Different Steam Volumes")
+    ax4.set_title("Production Rate for Different Steam Volumes")
     ax4.legend(); ax4.grid(alpha=0.3)
     st.pyplot(fig4)
 
@@ -416,7 +416,7 @@ with col1:
         d, t, v, r = simulate_cycle(steam_rate, steam_temp, steam_q, injection_duration, sd, depth, prod_days_to_show)
         ax5.plot(d, r, label=f"{sd} days soak", color=color)
     ax5.set_xlabel("Day"); ax5.set_ylabel("Oil Rate (bbl/day)")
-    ax5.set_title("5. Production Rate for Different Soak Times")
+    ax5.set_title("Production Rate for Different Soak Times")
     ax5.legend(); ax5.grid(alpha=0.3)
     st.pyplot(fig5)
 
@@ -426,7 +426,7 @@ with col2:
         fig6, ax6 = plt.subplots(figsize=(7, 5))
         ax6.plot(st.session_state.dyno_position, st.session_state.dyno_load, color="#6A1B9A")
         ax6.set_xlabel("Rod Position"); ax6.set_ylabel("Polished-Rod Load")
-        ax6.set_title(f"6. Dynamometer Card (Fillage = {st.session_state.pump_fillage*100:.0f}%)")
+        ax6.set_title(f"Dynamometer Card (Fillage = {st.session_state.pump_fillage*100:.0f}%)")
         ax6.grid(alpha=0.3)
         st.pyplot(fig6)
     else:
